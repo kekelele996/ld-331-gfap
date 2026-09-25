@@ -64,6 +64,11 @@ body {
   justify-content: space-between;
 }
 
+.decided-hint {
+  color: #909399;
+  font-size: 13px;
+}
+
 @media (max-width: 900px) {
   .grid {
     grid-template-columns: 1fr;

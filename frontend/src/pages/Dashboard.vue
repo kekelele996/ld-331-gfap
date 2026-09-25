@@ -41,7 +41,32 @@
             <el-table-column prop="applicant" label="申请人" />
             <el-table-column prop="replacement" label="替班人" />
             <el-table-column prop="date" label="日期" />
-            <el-table-column prop="status" label="状态" />
+            <el-table-column label="状态">
+              <template #default="{ row }">
+                <el-tag :type="statusTagType(row.status)">{{ row.status }}</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="操作" width="150">
+              <template #default="{ row }">
+                <template v-if="row.status === REQUEST_STATUS.PENDING">
+                  <el-button
+                    type="success"
+                    size="small"
+                    :loading="decidingId === row.id"
+                    :disabled="decidingId !== null"
+                    @click="decide(row.id, 'approve')"
+                  >同意</el-button>
+                  <el-button
+                    type="danger"
+                    size="small"
+                    :loading="decidingId === row.id"
+                    :disabled="decidingId !== null"
+                    @click="decide(row.id, 'reject')"
+                  >驳回</el-button>
+                </template>
+                <span v-else class="decided-hint">已处理</span>
+              </template>
+            </el-table-column>
           </el-table>
         </el-card>
         <el-card shadow="never">
@@ -60,16 +85,41 @@
 
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue';
-import { fetchDashboard } from '../api/schedule';
+import { ElMessage } from 'element-plus';
+import { decideShiftRequest, fetchDashboard } from '../api/schedule';
 import ScheduleBoard from '../components/ScheduleBoard.vue';
 import { APP_TITLE } from '../constants/app';
 import type { DashboardData } from '../types/schedule';
 
+const REQUEST_STATUS = { PENDING: '待审批', APPROVED: '已通过', REJECTED: '已驳回' } as const;
+
 const department = ref('急诊科');
 const data = reactive<DashboardData>({ rules: [], schedule: [], conflicts: [], requests: [], stats: [] });
+const decidingId = ref<number | null>(null);
 
 async function load() {
   Object.assign(data, await fetchDashboard(department.value));
+}
+
+function statusTagType(status: string) {
+  if (status === REQUEST_STATUS.APPROVED) return 'success';
+  if (status === REQUEST_STATUS.REJECTED) return 'danger';
+  return 'warning';
+}
+
+async function decide(id: number, action: 'approve' | 'reject') {
+  if (decidingId.value !== null) return;
+  decidingId.value = id;
+  try {
+    const decided = await decideShiftRequest(id, action);
+    ElMessage.success(`申请已处理：${decided.status}`);
+    // 重新拉取，保证申请列表与当天排班表都展示最新状态
+    await load();
+  } catch {
+    ElMessage.error('处理失败，请稍后重试');
+  } finally {
+    decidingId.value = null;
+  }
 }
 
 onMounted(load);

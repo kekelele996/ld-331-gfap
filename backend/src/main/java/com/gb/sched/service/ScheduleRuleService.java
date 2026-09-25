@@ -3,6 +3,7 @@ package com.gb.sched.service;
 import com.gb.sched.config.AppConstants;
 import com.gb.sched.model.ConflictAlert;
 import com.gb.sched.model.ScheduleItem;
+import com.gb.sched.model.ShiftSwap;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
@@ -11,6 +12,12 @@ import org.springframework.stereotype.Service;
 @Service
 public class ScheduleRuleService {
   private static final List<String> STAFF = List.of("陈医生", "林医生", "周护士", "赵护士", "王护士");
+
+  private final ShiftRequestService shiftRequestService;
+
+  public ScheduleRuleService(ShiftRequestService shiftRequestService) {
+    this.shiftRequestService = shiftRequestService;
+  }
 
   public List<ScheduleItem> generateMonthlySchedule(String department) {
     List<ScheduleItem> items = new ArrayList<>();
@@ -22,7 +29,35 @@ public class ScheduleRuleService {
         items.add(new ScheduleItem(current.toString(), department, index < 2 ? "医生" : "护士", STAFF.get(index), shift, day % 6 == 0, shiftColor(shift)));
       }
     }
+    shiftRequestService.approvedSwaps().forEach(swap -> applySwap(items, swap));
     return items;
+  }
+
+  /** 同意调班后，申请人与替班人在申请当天的班次互换。 */
+  private void applySwap(List<ScheduleItem> items, ShiftSwap swap) {
+    int applicantIndex = findItem(items, swap.date(), swap.applicant());
+    int replacementIndex = findItem(items, swap.date(), swap.replacement());
+    if (applicantIndex < 0 || replacementIndex < 0) {
+      return;
+    }
+    ScheduleItem applicantItem = items.get(applicantIndex);
+    ScheduleItem replacementItem = items.get(replacementIndex);
+    items.set(applicantIndex, withShift(applicantItem, replacementItem.shift()));
+    items.set(replacementIndex, withShift(replacementItem, applicantItem.shift()));
+  }
+
+  private int findItem(List<ScheduleItem> items, String date, String staffName) {
+    for (int i = 0; i < items.size(); i++) {
+      ScheduleItem item = items.get(i);
+      if (item.date().equals(date) && item.staffName().equals(staffName)) {
+        return i;
+      }
+    }
+    return -1;
+  }
+
+  private ScheduleItem withShift(ScheduleItem item, String shift) {
+    return new ScheduleItem(item.date(), item.department(), item.position(), item.staffName(), shift, item.holiday(), shiftColor(shift));
   }
 
   public List<ConflictAlert> detectConflicts(List<ScheduleItem> schedule) {
