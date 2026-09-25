@@ -1,0 +1,16 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: gbsched
+  datasource:
+    url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/${DB_NAME:gbsched}?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai
+    username: ${DB_USER:gbsched_user}
+    password: ${DB_PASSWORD:gbsched_password}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
