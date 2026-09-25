@@ -17,6 +17,7 @@ export interface ConflictAlert {
 
 export interface ShiftRequest {
   id: number;
+  department: string;
   applicant: string;
   replacement: string;
   date: string;

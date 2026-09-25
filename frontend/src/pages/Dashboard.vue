@@ -37,16 +37,42 @@
       <section class="grid">
         <el-card shadow="never">
           <template #header>调班与替班申请</template>
-          <el-table :data="data.requests" height="240">
-            <el-table-column prop="applicant" label="申请人" />
-            <el-table-column prop="replacement" label="替班人" />
-            <el-table-column prop="date" label="日期" />
-            <el-table-column prop="status" label="状态" />
+          <el-table :data="data.requests" height="280">
+            <el-table-column prop="applicant" label="申请人" width="80" />
+            <el-table-column prop="replacement" label="替班人" width="80" />
+            <el-table-column prop="date" label="日期" width="110" />
+            <el-table-column prop="reason" label="原因" min-width="130" show-overflow-tooltip />
+            <el-table-column label="状态" width="100">
+              <template #default="{ row }">
+                <el-tag :type="statusTagType(row.status)" size="small">{{ row.status }}</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="审批操作" width="160">
+              <template #default="{ row }">
+                <template v-if="isPending(row)">
+                  <el-button
+                    type="success"
+                    size="small"
+                    :loading="processingId === row.id"
+                    :disabled="processingId !== null"
+                    @click="handleDecision(row, true)"
+                  >同意</el-button>
+                  <el-button
+                    type="danger"
+                    size="small"
+                    :loading="processingId === row.id"
+                    :disabled="processingId !== null"
+                    @click="handleDecision(row, false)"
+                  >驳回</el-button>
+                </template>
+                <span v-else class="handled-text">已处理</span>
+              </template>
+            </el-table-column>
           </el-table>
         </el-card>
         <el-card shadow="never">
           <template #header>出勤与工时统计</template>
-          <el-table :data="data.stats" height="240">
+          <el-table :data="data.stats" height="280">
             <el-table-column prop="staffName" label="人员" />
             <el-table-column prop="dayShift" label="白班" />
             <el-table-column prop="nightShift" label="夜班" />
@@ -60,17 +86,59 @@
 
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue';
-import { fetchDashboard } from '../api/schedule';
+import { ElMessage } from 'element-plus';
+import { decideShiftRequest, fetchDashboard } from '../api/schedule';
 import ScheduleBoard from '../components/ScheduleBoard.vue';
-import { APP_TITLE } from '../constants/app';
-import type { DashboardData } from '../types/schedule';
+import { APP_TITLE, REQUEST_STATUS_APPROVED, REQUEST_STATUS_PENDING, REQUEST_STATUS_REJECTED } from '../constants/app';
+import type { DashboardData, ShiftRequest } from '../types/schedule';
 
 const department = ref('急诊科');
 const data = reactive<DashboardData>({ rules: [], schedule: [], conflicts: [], requests: [], stats: [] });
+// 正在处理的申请 id：处理入口据此收起并禁用，防止主管重复点击或页面重试提交。
+const processingId = ref<number | null>(null);
 
 async function load() {
   Object.assign(data, await fetchDashboard(department.value));
 }
 
+function isPending(row: ShiftRequest) {
+  return row.status === REQUEST_STATUS_PENDING;
+}
+
+function statusTagType(status: string) {
+  if (status === REQUEST_STATUS_APPROVED) return 'success';
+  if (status === REQUEST_STATUS_REJECTED) return 'danger';
+  return 'warning';
+}
+
+async function handleDecision(row: ShiftRequest, approved: boolean) {
+  processingId.value = row.id;
+  try {
+    const updated = await decideShiftRequest(row.id, approved);
+    ElMessage.success(
+      updated.status === REQUEST_STATUS_APPROVED
+        ? '已同意，申请当天班次已互换'
+        : '已驳回，原排班保持不变',
+    );
+    // 重新拉取：申请列表显示最新审批状态，当天排班表显示互换后的班次。
+    await load();
+  } catch (error: unknown) {
+    const message =
+      typeof error === 'object' && error !== null && 'response' in error
+        ? ((error as { response?: { data?: { message?: string } } }).response?.data?.message ?? '审批提交失败，请重试')
+        : '审批提交失败，请重试';
+    ElMessage.error(message);
+  } finally {
+    processingId.value = null;
+  }
+}
+
 onMounted(load);
 </script>
+
+<style scoped>
+.handled-text {
+  color: #909399;
+  font-size: 13px;
+}
+</style>

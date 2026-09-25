@@ -6,3 +6,7 @@ export const SHIFT_COLORS: Record<string, string> = {
   夜班: '#626aef',
   休息: '#909399',
 };
+
+export const REQUEST_STATUS_PENDING = '主管审批中';
+export const REQUEST_STATUS_APPROVED = '已通过';
+export const REQUEST_STATUS_REJECTED = '已驳回';

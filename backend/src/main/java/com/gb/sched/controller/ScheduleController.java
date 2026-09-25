@@ -2,13 +2,20 @@ package com.gb.sched.controller;
 
 import com.gb.sched.model.Department;
 import com.gb.sched.model.ScheduleItem;
+import com.gb.sched.model.ShiftRequest;
 import com.gb.sched.service.DepartmentService;
 import com.gb.sched.service.ScheduleRuleService;
 import com.gb.sched.service.ShiftRequestService;
 import com.gb.sched.service.StatsService;
 import java.util.List;
 import java.util.Map;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -39,8 +46,20 @@ public class ScheduleController {
         "stats", statsService.monthlyStats());
   }
 
-  @GetMapping("/departments")
-  public List<Department> departments() {
-    return departmentService.listDepartments();
+  @PostMapping("/shift-requests/{id}/decision")
+  public ShiftRequest decide(@PathVariable long id, @RequestBody DecisionRequest request) {
+    return shiftRequestService.decide(id, request != null && request.approved());
   }
+
+  @ExceptionHandler(ShiftRequestService.RequestNotFoundException.class)
+  public ResponseEntity<Map<String, String>> handleNotFound(ShiftRequestService.RequestNotFoundException ex) {
+    return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("message", ex.getMessage()));
+  }
+
+  @ExceptionHandler(IllegalArgumentException.class)
+  public ResponseEntity<Map<String, String>> handleBadRequest(IllegalArgumentException ex) {
+    return ResponseEntity.badRequest().body(Map.of("message", ex.getMessage()));
+  }
+
+  public record DecisionRequest(boolean approved) {}
 }
